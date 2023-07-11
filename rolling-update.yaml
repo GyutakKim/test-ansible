@@ -1,0 +1,26 @@
+- name: Update cluster config
+  hosts:
+    - "{{ cluster }}"
+  remote_user: ubuntu
+  become: yes
+  become_user: root
+  gather_facts: no
+  order: inventory
+  vars:
+    config: "{{ lookup('file', './config/{{cluster}}.yaml') | from_yaml }}"
+
+  tasks:
+    - name: Update cluster-wide config
+      shell:
+        cmd: ./bin/kafka-configs.sh --bootstrap-server localhost:9092 --entity-type brokers --entity-default --alter --add-config {{ item.key }}={{ item.value }}
+        chdir: /opt/{{ config.version }}
+      register: res1
+      loop: "{{ config.cluster_wide | combine({}) | dict2items }}"
+      run_once: true
+
+    - name: Update per-broker config
+      shell:
+        cmd: ./bin/kafka-configs.sh --alter --bootstrap-server localhost:9092 --entity-type brokers --entity-name $( grep "broker.id" /mnt/kafka/logs/meta.properties | cut -d'=' -f2- ) --add-config {{ item.key }}={{ item.value }}
+        chdir: /opt/{{ config.version }}
+      when: config.per_broker.value != None
+      loop: "{{ config.per_broker | combine({}) | dict2items }}"
